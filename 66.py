@@ -1,41 +1,39 @@
 import streamlit as st
+import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
+import numpy as np
 
-st.title("🚗 Shortest Path Finder - Town Navigation App")
+st.set_page_config(page_title="Shortest Path Finder", layout="wide")
+st.title("🚗 Shortest Path Finder with Custom Distance Matrix")
 
-# Define the graph using adjacency list
-edges = {
-    'Origin': {'A': 40, 'B': 60, 'C': 50},
-    'A': {'B': 10, 'D': 70},
-    'B': {'C': 20, 'D': 55, 'E': 40},
-    'C': {'E': 50},
-    'D': {'E': 10},
-    'E': {'Destination': 60},
-    'Destination': {}
-}
+# Define nodes
+towns = ['Origin', 'A', 'B', 'C', 'D', 'E', 'Destination']
 
-# Create a directed graph
+# Editable distance matrix (initial values from original problem)
+default_data = pd.DataFrame(np.nan, index=towns, columns=towns)
+default_data.loc['Origin', ['A', 'B', 'C']] = [40, 60, 50]
+default_data.loc['A', ['B', 'D']] = [10, 70]
+default_data.loc['B', ['C', 'D', 'E']] = [20, 55, 40]
+default_data.loc['C', 'E'] = 50
+default_data.loc['D', 'E'] = 10
+default_data.loc['E', 'Destination'] = 60
+
+st.subheader("🛠️ Edit Distances (Leave blank for no direct road)")
+distance_df = st.data_editor(
+    default_data,
+    use_container_width=True,
+    key="matrix_editor"
+)
+
+# Create graph from edited matrix
 G = nx.DiGraph()
 
-# Add edges and weights to the graph
-for u in edges:
-    for v, w in edges[u].items():
-        G.add_edge(u, v, weight=w)
-
-# Function to draw the graph with optional highlighted path
-def draw_graph(path=None):
-    pos = nx.spring_layout(G, seed=42)
-    edge_labels = nx.get_edge_attributes(G, 'weight')
-    nx.draw(G, pos, with_labels=True, node_color='skyblue', node_size=1500, font_size=14, arrows=True)
-    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
-
-    # Highlight the shortest path
-    if path:
-        path_edges = list(zip(path, path[1:]))
-        nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='red', width=3)
-
-    st.pyplot(plt)
+for from_node in towns:
+    for to_node in towns:
+        weight = distance_df.loc[from_node, to_node]
+        if pd.notna(weight):
+            G.add_edge(from_node, to_node, weight=float(weight))
 
 # Calculate shortest path
 try:
@@ -43,10 +41,23 @@ try:
     total_distance = nx.dijkstra_path_length(G, source='Origin', target='Destination')
 
     st.subheader("🔍 Shortest Path")
-    st.write(" → ".join(path))
-    st.write(f"📏 Total Distance: {total_distance} miles")
+    st.success(" → ".join(path))
+    st.write(f"📏 Total Distance: `{total_distance}` miles")
 
-    st.subheader("🧭 Network Map")
-    draw_graph(path)
+    # Draw graph
+    st.subheader("📍 Route Visualization")
+    pos = nx.spring_layout(G, seed=42)
+    fig, ax = plt.subplots(figsize=(10, 6))
+    edge_labels = nx.get_edge_attributes(G, 'weight')
+    nx.draw(G, pos, with_labels=True, node_size=1500, node_color="skyblue", arrows=True)
+    nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels)
+
+    # Highlight path
+    path_edges = list(zip(path, path[1:]))
+    nx.draw_networkx_edges(G, pos, edgelist=path_edges, edge_color='red', width=3)
+    st.pyplot(fig)
+
+except nx.NetworkXNoPath:
+    st.error("❌ No path found from Origin to Destination. Please check your input.")
 except Exception as e:
-    st.error(f"❌ Unable to find a path: {e}")
+    st.error(f"Error: {e}")
